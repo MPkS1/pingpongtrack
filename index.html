@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ping Pong Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            position: relative;
+        }
+
+        #game-board {
+            width: 80%;
+            height: 90%;
+            margin: auto;
+            border: 5px solid black;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bat, .ball {
+            position: absolute;
+            background-color: #ff4500;
+        }
+
+        .bat {
+            width: 20px;
+            height: 100px;
+        }
+
+        .ball {
+            width: 20px;
+            height: 20px;
+            background-color: #00ff00;
+            border-radius: 50%;
+        }
+
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80px;
+            color: red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-board">
+        <div id="left-bat" class="bat" style="left: 10px; top: 50%;"></div>
+        <div id="right-bat" class="bat" style="right: 10px; top: 50%;"></div>
+        <div id="ball" class="ball" style="left: 50%; top: 50%;"></div>
+        <div id="countdown">3</div>
+    </div>
+
+    <video id="video" autoplay playsinline style="display: none;"></video>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script>
+        const leftBat = document.getElementById("left-bat");
+        const rightBat = document.getElementById("right-bat");
+        const ball = document.getElementById("ball");
+        const countdownElement = document.getElementById("countdown");
+        const gameBoard = document.getElementById("game-board");
+
+        let ballVelocity = { x: 4, y: 4 };
+        let gameStarted = false;
+
+        const videoElement = document.getElementById('video');
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(results => {
+            if (!results.multiHandLandmarks) return;
+
+            results.multiHandLandmarks.forEach(landmarks => {
+                const wristY = landmarks[0].y * window.innerHeight;
+
+                if (landmarks[0].x < 0.5) {
+                    rightBat.style.top = `${Math.min(Math.max(wristY - 50, 0), gameBoard.offsetHeight - 100)}px`;
+                } else {
+                    leftBat.style.top = `${Math.min(Math.max(wristY - 50, 0), gameBoard.offsetHeight - 100)}px`;
+                }
+            });
+        });
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => await hands.send({image: videoElement}),
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+        function startCountdown() {
+            countdownElement.style.display = "block";
+            let count = 3;
+
+            const interval = setInterval(() => {
+                countdownElement.textContent = count;
+                count--;
+                if (count < 0) {
+                    clearInterval(interval);
+                    countdownElement.style.display = "none";
+                    gameStarted = true;
+                    requestAnimationFrame(moveBall);
+                }
+            }, 1000);
+        }
+
+        function resetBall() {
+            // Position the ball in the center of the game board
+            ball.style.left = `${(gameBoard.offsetWidth / 2) - (ball.offsetWidth / 2)}px`;
+            ball.style.top = `${(gameBoard.offsetHeight / 2) - (ball.offsetHeight / 2)}px`;
+            
+            ballVelocity = { x: 4, y: 4 };
+            gameStarted = false;
+            startCountdown();
+        }
+
+        function moveBall() {
+            if (!gameStarted) return;
+
+            let ballX = ball.offsetLeft;
+            let ballY = ball.offsetTop;
+
+            ballX += ballVelocity.x;
+            ballY += ballVelocity.y;
+
+            if (ballY <= 0 || ballY + ball.offsetHeight >= gameBoard.offsetHeight) {
+                ballVelocity.y *= -1;
+            }
+
+            if (ballX <= leftBat.offsetLeft + leftBat.offsetWidth &&
+                ballY >= leftBat.offsetTop &&
+                ballY <= leftBat.offsetTop + leftBat.offsetHeight) {
+                ballVelocity.x *= -1;
+                ballVelocity.x *= 1.0005;
+            }
+
+            if (ballX + ball.offsetWidth >= rightBat.offsetLeft &&
+                ballY >= rightBat.offsetTop &&
+                ballY <= rightBat.offsetTop + rightBat.offsetHeight) {
+                ballVelocity.x *= -1;
+                ballVelocity.x *= 1.0005;
+            }
+
+            // If ball goes off either edge, just reset the ball without counting score
+            if (ballX <= 0 || ballX + ball.offsetWidth >= gameBoard.offsetWidth) {
+                resetBall();
+                return; // Stop the current animation frame
+            }
+
+            ball.style.left = `${ballX}px`;
+            ball.style.top = `${ballY}px`;
+
+            requestAnimationFrame(moveBall);
+        }
+
+        // Initial setup
+        resetBall();
+    </script>
+</body>
+</html>
